@@ -1,71 +1,147 @@
 <!DOCTYPE html>
 <html>
 <head>
+
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
+
 body {
-  margin: 0;
-  background: transparent;
-  color: white;
-  font-family: Arial, sans-serif;
-  font-size: 28px;
-  font-weight: bold;
-  text-shadow: 2px 2px 4px black;
-  overflow: hidden;
+margin:0;
+background:transparent;
+color:white;
+font-family:Arial,sans-serif;
+font-size:24px;
+font-weight:bold;
+text-shadow:2px 2px 5px black;
+overflow:hidden;
 }
 
-#location {
-  padding: 10px;
+#overlay {
+padding:8px;
+white-space:nowrap;
 }
+
 </style>
 
 </head>
 
 <body>
 
-<div id="location">
-📍 Getting location...
+<div id="overlay">
+📍 Loading location...
 </div>
+
 
 <script>
 
-function updateLocation(position) {
+let startLat = null;
+let startLon = null;
+let distanceMeters = 0;
+
+
+function updateLocation(position){
 
 let lat = position.coords.latitude;
 let lon = position.coords.longitude;
 
-fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`)
-.then(response => response.json())
-.then(data => {
 
-let address = data.address;
+/* Calculate walking distance */
 
-let street = address.road || "";
-let city = address.city || address.town || address.village || "";
+if(startLat !== null){
 
-document.getElementById("location").innerHTML =
-"📍 " + street + ", " + city;
+let R = 6371000;
+
+let dLat = (lat-startLat)*Math.PI/180;
+let dLon = (lon-startLon)*Math.PI/180;
+
+let a =
+Math.sin(dLat/2)*Math.sin(dLat/2) +
+Math.cos(startLat*Math.PI/180) *
+Math.cos(lat*Math.PI/180) *
+Math.sin(dLon/2)*Math.sin(dLon/2);
+
+let c = 2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+
+distanceMeters += R*c;
+
+}
+
+startLat = lat;
+startLon = lon;
+
+
+let miles = (distanceMeters/1609.34).toFixed(2);
+let km = (distanceMeters/1000).toFixed(2);
+
+
+
+/* Get street and neighborhood */
+
+fetch(
+`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`
+)
+
+.then(r=>r.json())
+
+.then(data=>{
+
+let a=data.address;
+
+let street=a.road || "";
+let neighborhood=a.neighbourhood || a.suburb || "";
+let city=a.city || a.town || "";
+
+
+/* Weather */
+
+fetch(
+`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m`
+)
+
+.then(r=>r.json())
+
+.then(weather=>{
+
+let celsius =
+weather.current.temperature_2m;
+
+let fahrenheit =
+(celsius*9/5+32).toFixed(0);
+
+
+document.getElementById("overlay").innerHTML =
+
+`📍 ${street}${neighborhood ? " • "+neighborhood : ""} • ${city} | 🌡️ ${fahrenheit}°F/${celsius}°C | 🚶 ${miles} mi (${km} km) walked`;
+
+});
 
 });
 
 }
 
 
-function error() {
-document.getElementById("location").innerHTML =
+function locationError(){
+
+document.getElementById("overlay").innerHTML =
 "📍 Location unavailable";
+
 }
 
 
 navigator.geolocation.watchPosition(
+
 updateLocation,
-error,
+
+locationError,
+
 {
 enableHighAccuracy:true,
 maximumAge:5000,
 timeout:10000
-});
+}
+
+);
 
 </script>
 
