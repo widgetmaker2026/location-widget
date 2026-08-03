@@ -42,7 +42,7 @@ let lastLon = null;
 let distance = 0;
 
 
-/* Distance calculation */
+/* Calculate distance walked */
 
 function distanceBetween(lat1, lon1, lat2, lon2){
 
@@ -57,7 +57,8 @@ function distanceBetween(lat1, lon1, lat2, lon2){
     Math.cos(lat2*Math.PI/180) *
     Math.sin(dLon/2)**2;
 
-    return R * 2 * Math.atan2(
+    return R * 2 *
+    Math.atan2(
         Math.sqrt(a),
         Math.sqrt(1-a)
     );
@@ -65,15 +66,79 @@ function distanceBetween(lat1, lon1, lat2, lon2){
 }
 
 
-/* Get location */
+/* Find clean neighborhood */
+
+function getNeighborhood(address){
+
+    let fields = [
+
+        address.neighbourhood,
+        address.quarter,
+        address.suburb,
+        address.city_district,
+        address.borough
+
+    ];
+
+
+    let blocked = [
+
+        "community board",
+        "community",
+        "cb ",
+        "district",
+        "ward",
+        "administrative",
+        "county"
+
+    ];
+
+
+    for(let item of fields){
+
+        if(!item) continue;
+
+
+        let value =
+        item.toString();
+
+
+        let lower =
+        value.toLowerCase();
+
+
+        let bad =
+        blocked.some(word =>
+        lower.includes(word)
+        );
+
+
+        if(!bad){
+
+            return value;
+
+        }
+
+    }
+
+
+    return "";
+
+}
+
+
+
+/* GPS update */
 
 function updateLocation(position){
 
-    let lat = position.coords.latitude;
-    let lon = position.coords.longitude;
+    let lat =
+    position.coords.latitude;
+
+    let lon =
+    position.coords.longitude;
 
 
-    /* Calculate walking distance */
 
     if(lastLat !== null){
 
@@ -85,9 +150,12 @@ function updateLocation(position){
             lon
         );
 
+
         // ignore GPS jumps
         if(moved < 100){
+
             distance += moved;
+
         }
 
     }
@@ -97,89 +165,72 @@ function updateLocation(position){
     lastLon = lon;
 
 
+
     let miles =
     (distance / 1609.34).toFixed(2);
+
 
     let km =
     (distance / 1000).toFixed(2);
 
 
 
-    /* Reverse geocode */
+    /* Reverse location lookup */
 
     fetch(
+
     "https://nominatim.openstreetmap.org/reverse?format=json&lat="
     +lat+
-    "&lon="+lon+
+    "&lon="
+    +lon+
     "&zoom=18"
+
     )
 
-    .then(response => response.json())
 
-    .then(location => {
+    .then(response=>response.json())
 
 
-        let a = location.address;
+    .then(location=>{
+
+
+        let address =
+        location.address;
 
 
         let street =
-        a.road || "";
+        address.road || "";
 
-
-        /*
-        Neighborhood priority:
-        neighborhood > quarter > suburb
-        */
 
         let neighborhood =
-        a.neighbourhood ||
-        a.quarter ||
-        a.suburb ||
-        "";
+        getNeighborhood(address);
 
 
         let city =
-        a.city ||
-        a.town ||
-        a.village ||
+        address.city ||
+        address.town ||
+        address.village ||
         "";
-
-
-
-        /* Remove bad NYC administrative names */
-
-        let blocked = [
-            "Community Board",
-            "CB ",
-            "District",
-            "Ward",
-            "Administrative"
-        ];
-
-
-        blocked.forEach(word => {
-
-            if(neighborhood.includes(word)){
-                neighborhood="";
-            }
-
-        });
 
 
 
         /* Weather */
 
         fetch(
+
         "https://api.open-meteo.com/v1/forecast?latitude="
         +lat+
         "&longitude="
         +lon+
         "&current=temperature_2m"
+
         )
 
-        .then(response => response.json())
 
-        .then(weather => {
+        .then(response=>response.json())
+
+
+        .then(weather=>{
 
 
             let c =
@@ -194,6 +245,7 @@ function updateLocation(position){
 
 
             document.getElementById("overlay").innerHTML =
+
 
             "📍 " +
             street +
@@ -229,30 +281,32 @@ function updateLocation(position){
 
 
 
-/* Error */
+/* GPS error */
 
 function locationError(){
 
-document.getElementById("overlay").innerHTML =
-"📍 Location unavailable";
+    document.getElementById("overlay").innerHTML =
+    "📍 Location unavailable";
 
 }
 
 
 
-/* Start GPS */
+/* Start tracking */
 
 navigator.geolocation.watchPosition(
 
-updateLocation,
+    updateLocation,
 
-locationError,
+    locationError,
 
-{
-enableHighAccuracy:true,
-maximumAge:10000,
-timeout:15000
-}
+    {
+
+        enableHighAccuracy:true,
+        maximumAge:5000,
+        timeout:15000
+
+    }
 
 );
 
