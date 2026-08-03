@@ -1,30 +1,39 @@
 <!DOCTYPE html>
 <html>
+
 <head>
+
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
+
 body {
- margin:0;
- background:transparent;
- color:white;
- font-family:Arial,sans-serif;
- font-size:24px;
- font-weight:bold;
- text-shadow:2px 2px 4px #000;
- overflow:hidden;
+    margin:0;
+    background:transparent;
+    color:white;
+    font-family:Arial,sans-serif;
+    font-size:24px;
+    font-weight:bold;
+    text-shadow:2px 2px 5px black;
+    overflow:hidden;
 }
 
 #overlay {
- padding:8px;
+    padding:8px;
+    white-space:nowrap;
 }
+
 </style>
 
 </head>
 
+
 <body>
 
-<div id="overlay">📍 Getting location...</div>
+<div id="overlay">
+📍 Getting location...
+</div>
+
 
 <script>
 
@@ -33,99 +42,212 @@ let lastLon = null;
 let distance = 0;
 
 
-function metersBetween(lat1,lon1,lat2,lon2){
+/* Distance calculation */
 
-let R=6371000;
+function distanceBetween(lat1, lon1, lat2, lon2){
 
-let dLat=(lat2-lat1)*Math.PI/180;
-let dLon=(lon2-lon1)*Math.PI/180;
+    let R = 6371000;
 
-let a =
-Math.sin(dLat/2)**2 +
-Math.cos(lat1*Math.PI/180) *
-Math.cos(lat2*Math.PI/180) *
-Math.sin(dLon/2)**2;
+    let dLat = (lat2-lat1) * Math.PI/180;
+    let dLon = (lon2-lon1) * Math.PI/180;
 
-return R * 2 * Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+    let a =
+    Math.sin(dLat/2)**2 +
+    Math.cos(lat1*Math.PI/180) *
+    Math.cos(lat2*Math.PI/180) *
+    Math.sin(dLon/2)**2;
+
+    return R * 2 * Math.atan2(
+        Math.sqrt(a),
+        Math.sqrt(1-a)
+    );
+
+}
+
+
+/* Get location */
+
+function updateLocation(position){
+
+    let lat = position.coords.latitude;
+    let lon = position.coords.longitude;
+
+
+    /* Calculate walking distance */
+
+    if(lastLat !== null){
+
+        let moved =
+        distanceBetween(
+            lastLat,
+            lastLon,
+            lat,
+            lon
+        );
+
+        // ignore GPS jumps
+        if(moved < 100){
+            distance += moved;
+        }
+
+    }
+
+
+    lastLat = lat;
+    lastLon = lon;
+
+
+    let miles =
+    (distance / 1609.34).toFixed(2);
+
+    let km =
+    (distance / 1000).toFixed(2);
+
+
+
+    /* Reverse geocode */
+
+    fetch(
+    "https://nominatim.openstreetmap.org/reverse?format=json&lat="
+    +lat+
+    "&lon="+lon+
+    "&zoom=18"
+    )
+
+    .then(response => response.json())
+
+    .then(location => {
+
+
+        let a = location.address;
+
+
+        let street =
+        a.road || "";
+
+
+        /*
+        Neighborhood priority:
+        neighborhood > quarter > suburb
+        */
+
+        let neighborhood =
+        a.neighbourhood ||
+        a.quarter ||
+        a.suburb ||
+        "";
+
+
+        let city =
+        a.city ||
+        a.town ||
+        a.village ||
+        "";
+
+
+
+        /* Remove bad NYC administrative names */
+
+        let blocked = [
+            "Community Board",
+            "CB ",
+            "District",
+            "Ward",
+            "Administrative"
+        ];
+
+
+        blocked.forEach(word => {
+
+            if(neighborhood.includes(word)){
+                neighborhood="";
+            }
+
+        });
+
+
+
+        /* Weather */
+
+        fetch(
+        "https://api.open-meteo.com/v1/forecast?latitude="
+        +lat+
+        "&longitude="
+        +lon+
+        "&current=temperature_2m"
+        )
+
+        .then(response => response.json())
+
+        .then(weather => {
+
+
+            let c =
+            weather.current.temperature_2m;
+
+
+            let f =
+            Math.round(
+                c * 9/5 + 32
+            );
+
+
+
+            document.getElementById("overlay").innerHTML =
+
+            "📍 " +
+            street +
+
+            (neighborhood ?
+            " • " + neighborhood :
+            "") +
+
+            (city ?
+            " • " + city :
+            "") +
+
+            " | 🌡️ " +
+            f +
+            "°F/" +
+            c +
+            "°C" +
+
+            " | 🚶 " +
+            miles +
+            " mi (" +
+            km +
+            " km) walked";
+
+
+        });
+
+
+    });
+
 
 }
 
 
-function update(position){
 
-let lat=position.coords.latitude;
-let lon=position.coords.longitude;
+/* Error */
 
+function locationError(){
 
-if(lastLat!==null){
-
-let moved=metersBetween(lastLat,lastLon,lat,lon);
-
-if(moved < 100){
- distance += moved;
-}
+document.getElementById("overlay").innerHTML =
+"📍 Location unavailable";
 
 }
 
-lastLat=lat;
-lastLon=lon;
 
 
-let miles=(distance/1609.34).toFixed(2);
-let km=(distance/1000).toFixed(2);
-
-
-fetch(
-"https://nominatim.openstreetmap.org/reverse?format=json&lat="+lat+"&lon="+lon
-)
-
-.then(r=>r.json())
-
-.then(location=>{
-
-
-let a=location.address;
-
-let street=a.road || "";
-let area=a.neighbourhood || a.suburb || "";
-let city=a.city || a.town || "";
-
-
-fetch(
-"https://api.open-meteo.com/v1/forecast?latitude="+lat+"&longitude="+lon+"&current=temperature_2m"
-)
-
-.then(r=>r.json())
-
-.then(weather=>{
-
-
-let c=weather.current.temperature_2m;
-let f=Math.round(c*9/5+32);
-
-
-document.getElementById("overlay").innerHTML=
-
-"📍 "+street+
-(area ? " • "+area:"")+
-(city ? " • "+city:"")+
-" | 🌡️ "+f+"°F/"+c+"°C"+
-" | 🚶 "+miles+" mi ("+km+" km) walked";
-
-
-});
-
-});
-
-
-}
-
+/* Start GPS */
 
 navigator.geolocation.watchPosition(
-update,
-()=>{
-document.getElementById("overlay").innerHTML="📍 Location unavailable";
-},
+
+updateLocation,
+
+locationError,
+
 {
 enableHighAccuracy:true,
 maximumAge:10000,
@@ -134,7 +256,10 @@ timeout:15000
 
 );
 
+
 </script>
 
+
 </body>
+
 </html>
